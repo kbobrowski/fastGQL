@@ -25,48 +25,43 @@ import java.util.stream.Collectors;
 
 public class JDBCUtils {
 
-  private final static Gson gson = new Gson();
-
-  private final static Map<Integer, Class<?>> sqlTypeToClass = Map.of(
-      4, Integer.class,
-      12, String.class
-  );
-
+  /**
+   *
+   * @param environment datafetcher environment
+   * @param client database client
+   * @return graphQL response
+   */
   public static Single<List<Map<String, Object>>> getGraphQLResponse(
       DataFetchingEnvironment environment, Pool client) {
     String tableName = environment.getField().getName();
 
-    Map<String, Object> args = environment.getArguments();
-    Integer limit = (Integer) args.get("limit");
-    Integer offset = (Integer) args.get("offset");
-    JsonElement orderBy = gson.toJsonTree(args.get("order_by"));
-    Object distinctOn = args.get("distinct_on");
-    JsonElement where = gson.toJsonTree(args.get("where"));
+    final Map<String, Object> args = environment.getArguments();
+    final Integer limit = (Integer) args.get("limit");
+    final Integer offset = (Integer) args.get("offset");
+    final JsonElement orderBy = gson.toJsonTree(args.get("order_by"));
+    final Object distinctOn = args.get("distinct_on");
+    final JsonElement where = gson.toJsonTree(args.get("where"));
 
     String query = "SELECT ";
 
     // DISTINCT ON
     if (distinctOn != null) {
-      query += String.format(
-          "DISTINCT ON ( %s ) ",
-          String.join(", ", (List<String>) distinctOn));
+      query += String.format("DISTINCT ON ( %s ) ", String.join(", ", (List<String>) distinctOn));
     }
 
     // SELECT FROM
-    List<String> fieldsToQuery = environment
-        .getSelectionSet()
-        .getFields()
-        .stream()
-        .map(SelectedField::getName)
-        .collect(Collectors.toList());
+    List<String> fieldsToQuery =
+        environment.getSelectionSet().getFields().stream()
+            .map(SelectedField::getName)
+            .collect(Collectors.toList());
     String fieldsToQueryComaSeparated = String.join(", ", fieldsToQuery);
     query += String.format("%s FROM %s ", fieldsToQueryComaSeparated, tableName);
 
     // WHERE
     if (where.isJsonObject()) {
-      query += String
-          .format("WHERE %s ",
-              ConditionalOperatorHelpers.getConditionQuery(where.getAsJsonObject()));
+      query +=
+          String.format(
+              "WHERE %s ", ConditionalOperatorHelpers.getConditionQuery(where.getAsJsonObject()));
     }
 
     // LIMIT
@@ -106,12 +101,20 @@ public class JDBCUtils {
             rowMaps.add(rowMap);
           }
           return rowMaps;
-        }
-    );
+        });
   }
 
-  public static TableSchema<?> getTableSchema(DatabaseMetaData databaseMetaData,
-      Statement statement, String tableName) throws SQLException {
+  /**
+   * get table schema.
+   * @param databaseMetaData
+   * @param statement
+   * @param tableName
+   * @return
+   * @throws SQLException
+   */
+  public static TableSchema<?> getTableSchema(
+      DatabaseMetaData databaseMetaData, Statement statement, String tableName)
+      throws SQLException {
     ResultSet primaryKeysResultSet = databaseMetaData.getPrimaryKeys(null, null, tableName);
     String primaryKeyName = null;
     while (primaryKeysResultSet.next()) {
@@ -124,8 +127,8 @@ public class JDBCUtils {
       throw new RuntimeException("Primary key not found");
     }
     primaryKeysResultSet.close();
-    ResultSet rowsResultSet = statement
-        .executeQuery(String.format("SELECT * FROM %s LIMIT 0", tableName));
+    ResultSet rowsResultSet =
+        statement.executeQuery(String.format("SELECT * FROM %s LIMIT 0", tableName));
     ResultSetMetaData rowsResultSetMetaData = rowsResultSet.getMetaData();
     int primaryKeyColumnNumber = rowsResultSet.findColumn(primaryKeyName);
     int primaryKeyType = rowsResultSetMetaData.getColumnType(primaryKeyColumnNumber);
@@ -133,8 +136,8 @@ public class JDBCUtils {
     if (!sqlTypeToClass.containsKey(primaryKeyType)) {
       throw new RuntimeException("Only integer or string class for columns currently supported");
     }
-    TableSchema<?> table = new TableSchema<>(tableName, primaryKeyName,
-        sqlTypeToClass.get(primaryKeyType));
+    TableSchema<?> table =
+        new TableSchema<>(tableName, primaryKeyName, sqlTypeToClass.get(primaryKeyType));
 
     for (int i = 1; i <= columnCount; i++) {
       if (i == primaryKeyColumnNumber) {
@@ -155,8 +158,8 @@ public class JDBCUtils {
       throws SQLException {
     DatabaseMetaData databaseMetaData = connection.getMetaData();
     Statement statement = connection.createStatement();
-    ResultSet getTablesResultSet = databaseMetaData
-        .getTables(null, null, null, new String[]{"TABLE"});
+    ResultSet getTablesResultSet =
+        databaseMetaData.getTables(null, null, null, new String[] {"TABLE"});
     Map<String, TableSchema<?>> tables = new HashMap<>();
     while (getTablesResultSet.next()) {
       String tableName = getTablesResultSet.getString("TABLE_NAME");
@@ -168,4 +171,10 @@ public class JDBCUtils {
     return tables;
   }
 
+  private static final Map<Integer, Class<?>> sqlTypeToClass =
+      Map.of(
+          4, Integer.class,
+          12, String.class);
+
+  private static final Gson gson = new Gson();
 }
