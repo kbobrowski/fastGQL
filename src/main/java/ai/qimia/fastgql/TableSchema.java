@@ -68,6 +68,10 @@ public class TableSchema<PKType> {
     columns.put(name.toLowerCase(), new Column<>(type, null));
   }
 
+  public void addForeignKey(final String name, final String referenceTableName) {
+    columns.put(name.toLowerCase(), new Column<>(String.class, referenceTableName));
+  }
+
   public GraphQLOutputType graphQLOutputType(final Map<String, TableSchema<?>> tableSchemaMap) {
     Set<String> parentNames = new HashSet<>();
     return new GraphQLList(graphQLObjectType(parentNames, tableSchemaMap));
@@ -91,13 +95,13 @@ public class TableSchema<PKType> {
     for (Map.Entry<String, Column<?>> entry : columns.entrySet()) {
       Column<?> column = entry.getValue();
       String columnName = entry.getKey();
-      if (column.getReferenceTable() != null && !tableSchemaMap
-          .containsKey(column.getReferenceTable())) {
+      String referenceTableName = column.getReferenceTable();
+      if (referenceTableName != null && !tableSchemaMap
+          .containsKey(referenceTableName)) {
         throw new RuntimeException("non existing table schema referenced");
       }
-      GraphQLOutputType graphQLOutputType = column.getReferenceTable() != null
-          ? tableSchemaMap.get(column.getReferenceTable())
-          .graphQLObjectType(parentNamesCopy, tableSchemaMap)
+      GraphQLOutputType graphQLOutputType = referenceTableName != null
+          ? new GraphQLTypeReference(referenceTableName)
           : classGraphQLScalarTypeMap.get(column.getClazz());
       builder.field(
           GraphQLFieldDefinition.newFieldDefinition()
