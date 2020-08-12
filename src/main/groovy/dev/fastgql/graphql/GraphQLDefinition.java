@@ -196,7 +196,7 @@ public class GraphQLDefinition {
     private Single<List<Map<String, Object>>> getResponse(
         SQLExecutor sqlExecutor, DataFetchingEnvironment env, Transaction transaction) {
       ComponentExecutable executionRoot = getExecutionRoot(env);
-      return executionRoot.execute(sqlExecutor, true);
+      return executionRoot.execute(sqlExecutor, true, null);
     }
 
     private Single<Map<String, Object>> getResponseMutation(
@@ -321,7 +321,7 @@ public class GraphQLDefinition {
                 .flatMap(
                     transaction ->
                         executionRoot
-                            .execute(transactionSQLExecutorFunction.apply(transaction), true)
+                            .execute(transactionSQLExecutorFunction.apply(transaction), true, null)
                             .toFlowable()
                             .flatMap(
                                 result -> transaction.rxCommit().andThen(Flowable.just(result))));
