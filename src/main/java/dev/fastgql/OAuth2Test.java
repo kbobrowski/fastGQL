@@ -2,12 +2,14 @@ package dev.fastgql;
 
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Launcher;
+import io.vertx.core.http.HttpHeaders;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.auth.PubSecKeyOptions;
 import io.vertx.ext.auth.jwt.JWTAuth;
 import io.vertx.ext.auth.jwt.JWTAuthOptions;
 import io.vertx.ext.auth.oauth2.AccessToken;
 import io.vertx.ext.auth.oauth2.OAuth2Auth;
+import io.vertx.ext.auth.oauth2.impl.OAuth2TokenImpl;
 import io.vertx.ext.auth.oauth2.providers.GithubAuth;
 import io.vertx.ext.web.Router;
 import io.vertx.ext.web.handler.OAuth2AuthHandler;
@@ -49,8 +51,11 @@ public class OAuth2Test extends AbstractVerticle {
           ctx.fail(res.cause());
         } else {
           final JsonObject userInfo = res.result();
-          ctx.response().putHeader("Content-Type", "text/plain")
-            .end(jwtAuth.generateToken(new JsonObject(Map.of("user", userInfo.getString("login")))));
+          final String jwtToken = jwtAuth.generateToken(new JsonObject(Map.of("user", userInfo.getString("login"))));
+          ctx.response()
+            .putHeader(HttpHeaders.LOCATION, String.format("/jwtcallback?jwt=%s", jwtToken))
+            .setStatusCode(302)
+            .end("redirecting");
         }
       });
     });
