@@ -12,14 +12,18 @@ class RoleSpec {
     final OpType select = OpType.select
     final OpType delete = OpType.delete
 
-    final Map<List<OpType>, OpSpec> opSpecs = new HashMap<>()
+    final Map<OpType, OpSpec> opSpecs = new HashMap<>()
 
     def ops(List<OpType> ops, Closure cl) {
         def opSpec = new OpSpec()
         def code = cl.rehydrate(opSpec, this, this)
         code.resolveStrategy = Closure.DELEGATE_ONLY
         code()
-        opSpecs.put(ops, opSpec)
+        ops.forEach(opType -> opSpecs.put(opType, opSpec))
+    }
+
+    OpSpec getOp(OpType opType) {
+        return opSpecs.get(opType)
     }
 
     @Override

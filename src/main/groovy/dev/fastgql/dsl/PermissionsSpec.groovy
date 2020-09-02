@@ -12,6 +12,10 @@ class PermissionsSpec {
         tables.put(name, tableSpec)
     }
 
+    TableSpec getTable(String name) {
+        return tables.get(name)
+    }
+
     @Override
     String toString() {
         "PermissionsSpec<tables: ${tables.toString()}>"

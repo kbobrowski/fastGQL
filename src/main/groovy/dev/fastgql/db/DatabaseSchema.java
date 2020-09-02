@@ -8,10 +8,10 @@ package dev.fastgql.db;
 
 import dev.fastgql.common.KeyType;
 import dev.fastgql.common.QualifiedName;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
+
+import java.util.*;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * Data structure defining database schema, including tables, keys, key types and foreign key
@@ -44,7 +44,7 @@ public class DatabaseSchema {
   }
 
   public static class Builder {
-    private Map<String, Map<String, KeyDefinition>> graph = new HashMap<>();
+    private final Map<String, Map<String, KeyDefinition>> graph = new HashMap<>();
 
     public Builder() {}
 
@@ -121,7 +121,7 @@ public class DatabaseSchema {
       if (referencing != null) {
         addKeyDefinition(
             new KeyDefinition(
-                referencing, keyDefinition.getKeyType(), null, Set.of(qualifiedName)));
+                referencing, keyDefinition.getKeyType(), null, Stream.of(qualifiedName).collect(Collectors.toSet())));
       }
     }
   }

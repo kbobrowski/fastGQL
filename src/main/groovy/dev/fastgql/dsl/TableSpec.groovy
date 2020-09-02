@@ -12,6 +12,10 @@ class TableSpec {
         roles.put(role, roleSpec)
     }
 
+    RoleSpec getRole(String name) {
+        return roles.get(name)
+    }
+
     @Override
     String toString() {
         "TableSpec<roles: ${roles.toString()}>"
