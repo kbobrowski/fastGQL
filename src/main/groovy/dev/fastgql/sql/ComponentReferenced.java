@@ -70,10 +70,12 @@ public class ComponentReferenced extends ExecutionRoot implements Component {
     if (keyValue == null) {
       return Single.just(Map.of());
     }
-    Consumer<SQLQuery> sqlQueryModifier = query ->
+    Consumer<SQLQuery> sqlQueryModifier =
+        query ->
             query.addWhereConditions(
                 String.format(
                     "(%s.%s = %s)", foreignTableAlias, foreignKeyName, keyValue.toString()));
-    return execute(sqlExecutor, false, sqlQueryModifier).map(response -> Map.of(fieldName, response));
+    return execute(sqlExecutor, false, sqlQueryModifier)
+        .map(response -> Map.of(fieldName, response));
   }
 }

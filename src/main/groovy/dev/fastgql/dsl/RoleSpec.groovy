@@ -14,7 +14,7 @@ class RoleSpec {
 
     final Map<OpType, OpSpec> opSpecs = new HashMap<>()
 
-    def ops(List<OpType> ops, Closure cl) {
+    def ops(List<OpType> ops, @DelegatesTo(strategy=Closure.DELEGATE_ONLY, value=OpSpec) Closure cl) {
         def opSpec = new OpSpec()
         def code = cl.rehydrate(opSpec, this, this)
         code.resolveStrategy = Closure.DELEGATE_ONLY

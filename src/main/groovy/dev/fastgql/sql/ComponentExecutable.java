@@ -23,5 +23,6 @@ public interface ComponentExecutable extends ComponentParent {
    *
    * @return {@link Single} which emits list of tables
    */
-  Single<List<Map<String, Object>>> execute(SQLExecutor sqlExecutor, boolean lockTables, Consumer<SQLQuery> sqlQueryModifier);
+  Single<List<Map<String, Object>>> execute(
+      SQLExecutor sqlExecutor, boolean lockTables, Consumer<SQLQuery> sqlQueryModifier);
 }

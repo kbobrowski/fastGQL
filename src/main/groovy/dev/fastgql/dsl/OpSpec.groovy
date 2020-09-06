@@ -20,22 +20,13 @@ class OpSpec {
 
     class Condition {
         final RelationalOperator relationalOperator
-        final String value
-        final Function<Map<String, String>, String> envFunction
+        final Object value
         LogicalConnective logicalConnective
         final List<Condition> next
 
-        Condition(RelationalOperator relationalOperator, String value) {
+        Condition(RelationalOperator relationalOperator, Object value) {
             this.relationalOperator = relationalOperator
             this.value = value
-            this.envFunction = null
-            this.next = new ArrayList<>()
-        }
-
-        Condition(RelationalOperator relationalOperator, Function<Map<String, String>, String> envFunction) {
-            this.relationalOperator = relationalOperator
-            this.value = null
-            this.envFunction = envFunction
             this.next = new ArrayList<>()
         }
 
@@ -59,24 +50,43 @@ class OpSpec {
 
         @Override
         String toString() {
-            "Condition<operator: ${relationalOperator}, value: ${value}, function: ${envFunction != null}, connective: ${logicalConnective}, next: ${next}"
+            "Condition<operator: ${relationalOperator}, value: ${value}, connective: ${logicalConnective}, next: ${next}>"
         }
     }
 
     class ConditionSpec {
 
-        def methodMissing(String name, Object args) {
-            def operator = name as RelationalOperator
-            def argList = args as List<Object>
-            def arg = argList.get(0)
-            if (arg instanceof String) {
-                return new Condition(operator, arg as String)
-            } else if (arg instanceof Closure) {
-                return new Condition(operator, arg as Function<Map<String, String>, String>)
+        def op(RelationalOperator relationalOperator, Object arg) {
+            if (arg instanceof Closure) {
+                return new Condition(relationalOperator, arg as Function<Map<String, Object>, Object>)
+            } else {
+                return new Condition(relationalOperator, arg)
             }
-            throw new MissingMethodException(name, ConditionSpec.class, args)
         }
 
+        def eq(Object arg) {
+            return op(RelationalOperator.eq, arg)
+        }
+
+        def neq(Object arg) {
+            return op(RelationalOperator.neq, arg)
+        }
+
+        def lt(Object arg) {
+            return op(RelationalOperator.lt, arg)
+        }
+
+        def gt(Object arg) {
+            return op(RelationalOperator.gt, arg)
+        }
+
+        def lte(Object arg) {
+            return op(RelationalOperator.lte, arg)
+        }
+
+        def gte(Object arg) {
+            return op(RelationalOperator.gte, arg)
+        }
     }
 
     class Check {
@@ -88,7 +98,7 @@ class OpSpec {
             this.column = column
         }
 
-        def is(Closure cl) {
+        def is(@DelegatesTo(strategy=Closure.DELEGATE_ONLY, value=ConditionSpec) Closure cl) {
             def conditionSpec = new ConditionSpec()
             def code = cl.rehydrate(conditionSpec, this, this)
             code.resolveStrategy = Closure.DELEGATE_ONLY
@@ -98,30 +108,29 @@ class OpSpec {
 
         @Override
         String toString() {
-            "Check<column: ${column}, condition: ${condition}"
+            "Check<column: ${column}, condition: ${condition}>"
         }
     }
 
     class Preset {
         final String column
-        String value
-        Function<Map<String, String>, String> envFunction
+        Object value
 
         Preset(String column) {
             this.column = column
         }
 
-        def to(String value) {
-            this.value = value
-        }
-
-        def to(Function<Map<String, String>, String> envFunction) {
-            this.envFunction = envFunction
+        def to(Object value) {
+            if (value instanceof Closure) {
+                this.value = value as Function<Map<String, Object>, Object>
+            } else {
+                this.value = value
+            }
         }
 
         @Override
         String toString() {
-            "Preset<column: ${column}, value: ${value}, function: ${envFunction != null}>"
+            "Preset<column: ${column}, value: ${value}>"
         }
     }
 

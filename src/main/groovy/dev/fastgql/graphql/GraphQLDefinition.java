@@ -11,6 +11,7 @@ import dev.fastgql.common.TableWithAlias;
 import dev.fastgql.db.DatabaseSchema;
 import dev.fastgql.db.DatasourceConfig;
 import dev.fastgql.db.DebeziumConfig;
+import dev.fastgql.dsl.OpSpec;
 import dev.fastgql.events.DebeziumEngineSingleton;
 import dev.fastgql.events.EventFlowableFactory;
 import dev.fastgql.sql.AliasGenerator;
@@ -25,6 +26,8 @@ import dev.fastgql.sql.MutationExecution;
 import dev.fastgql.sql.SQLArguments;
 import dev.fastgql.sql.SQLExecutor;
 import graphql.GraphQL;
+import graphql.language.Field;
+import graphql.language.SelectionSet;
 import graphql.schema.DataFetcher;
 import graphql.schema.DataFetchingEnvironment;
 import graphql.schema.DataFetchingFieldSelectionSet;
@@ -34,18 +37,19 @@ import graphql.schema.GraphQLObjectType;
 import graphql.schema.GraphQLSchema;
 import graphql.schema.SelectedField;
 import io.reactivex.Flowable;
+import io.reactivex.Observable;
 import io.reactivex.Single;
 import io.vertx.core.json.JsonArray;
 import io.vertx.ext.web.handler.graphql.VertxDataFetcher;
 import io.vertx.reactivex.core.Vertx;
 import io.vertx.reactivex.sqlclient.Pool;
+import io.vertx.reactivex.sqlclient.Row;
 import io.vertx.reactivex.sqlclient.Transaction;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.function.Function;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import javax.inject.Inject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -216,6 +220,112 @@ public class GraphQLDefinition {
           transaction, databaseSchema, fieldName, rows, returningColumns);
     }
 
+    private Function<Row, Single<Map<String, Object>>> createExecutorForColumn(
+        SQLQuery.Table table, Field field, GraphQLField graphQLField, SQLQuery sqlQuery) {
+      String columnName = graphQLField.getQualifiedName().getKeyName();
+      SQLQuery.SelectColumn selectColumn = sqlQuery.addSelectColumn(table, columnName);
+      return row -> {
+        Object value = row.getValue(selectColumn.getResultAlias());
+        return value == null ? Single.just(Map.of()) : Single.just(Map.of(columnName, value));
+      };
+    }
+
+    private Function<Row, Single<Map<String, Object>>> createExecutorForReferencing(
+        SQLQuery.Table table,
+        Field field,
+        GraphQLField graphQLField,
+        SQLQuery sqlQuery,
+        Transaction transaction) {
+      String columnName = graphQLField.getQualifiedName().getKeyName();
+      String foreignColumnName = graphQLField.getForeignName().getKeyName();
+      SQLQuery.Table foreignTable =
+          sqlQuery.createNewTable(graphQLField.getForeignName().getTableName());
+      SQLQuery.SelectColumn selectColumnReferencing =
+          sqlQuery.addLeftJoin(table, columnName, foreignTable, foreignColumnName);
+      List<Function<Row, Single<Map<String, Object>>>> executors =
+          createExecutors(foreignTable, field.getSelectionSet(), sqlQuery, transaction);
+      return row -> {
+        Object value = row.getValue(selectColumnReferencing.getResultAlias());
+        return value == null
+            ? Single.just(Map.of())
+            : executorListToSingleMap(executors, row)
+                .map(result -> Map.of(field.getName(), result));
+      };
+    }
+
+    private Function<Row, Single<Map<String, Object>>> createExecutorForReferenced(
+        SQLQuery.Table table,
+        Field field,
+        GraphQLField graphQLField,
+        SQLQuery sqlQuery,
+        Transaction transaction) {
+      String columnName = graphQLField.getQualifiedName().getKeyName();
+      String foreignTableName = graphQLField.getForeignName().getTableName();
+      String foreignColumnName = graphQLField.getForeignName().getKeyName();
+      SQLQuery.SelectColumn selectColumn = sqlQuery.addSelectColumn(table, columnName);
+      return row -> {
+        Object value = row.getValue(selectColumn.getResultAlias());
+        if (value == null) {
+          return Single.just(Map.of());
+        } else {
+          OpSpec opSpec = new OpSpec();
+          OpSpecUtils.checkColumnIsEqValue(opSpec, foreignColumnName, value);
+          return getRootResponse(foreignTableName, field.getSelectionSet(), transaction, opSpec)
+            .toList()
+            .map(result -> Map.of(field.getName(), result));
+        }
+      };
+    }
+
+    private List<Function<Row, Single<Map<String, Object>>>> createExecutors(
+        SQLQuery.Table table,
+        SelectionSet selectionSet,
+        SQLQuery sqlQuery,
+        Transaction transaction) {
+      Stream<Function<Row, Single<Map<String, Object>>>> executors =
+          selectionSet.getSelections().stream()
+              .filter(selection -> selection instanceof Field)
+              .map(selection -> (Field) selection)
+              .map(
+                  field -> {
+                    GraphQLField graphQLField =
+                        graphQLDatabaseSchema.fieldAt(table.getTableName(), field.getName());
+                    switch (graphQLField.getReferenceType()) {
+                      case NONE:
+                        return createExecutorForColumn(table, field, graphQLField, sqlQuery);
+                      case REFERENCING:
+                        return createExecutorForReferencing(
+                            table, field, graphQLField, sqlQuery, transaction);
+                      case REFERENCED:
+                        return createExecutorForReferenced(
+                            table, field, graphQLField, sqlQuery, transaction);
+                      default:
+                        return row -> Single.just(Map.of());
+                    }
+                  });
+      return executors.collect(Collectors.toList());
+    }
+
+    private static Single<Map<String, Object>> executorListToSingleMap(
+        List<Function<Row, Single<Map<String, Object>>>> executorList, Row row) {
+      return Observable.fromIterable(executorList)
+          .flatMapSingle(executor -> executor.apply(row))
+          .collect(HashMap::new, Map::putAll);
+    }
+
+    public Observable<Map<String, Object>> getRootResponse(
+        String tableName, SelectionSet selectionSet, Transaction transaction, OpSpec opSpec) {
+      SQLQuery sqlQuery = new SQLQuery(tableName, opSpec);
+      List<Function<Row, Single<Map<String, Object>>>> executorList =
+          createExecutors(sqlQuery.getTable(), selectionSet, sqlQuery, transaction);
+      String query = sqlQuery.createQuery();
+      System.out.println(query);
+      return transaction
+          .rxQuery(query)
+          .flatMapObservable(Observable::fromIterable)
+          .flatMapSingle(row -> executorListToSingleMap(executorList, row));
+    }
+
     /**
      * Enables query by defining data fetcher using {@link VertxDataFetcher} and adding it to {@link
      * GraphQLCodeRegistry}.
@@ -233,14 +343,29 @@ public class GraphQLDefinition {
                       .rxBegin()
                       .flatMap(
                           transaction ->
-                              getResponse(
-                                      transactionSQLExecutorFunction.apply(transaction),
-                                      env,
-                                      transaction)
-                                  .flatMap(
-                                      result ->
-                                          transaction.rxCommit().andThen(Single.just(result))))
+                              getRootResponse(
+                                      env.getField().getName(),
+                                      env.getField().getSelectionSet(),
+                                      transaction,
+                                      new OpSpec())
+                                  .toList())
                       .subscribe(promise::complete, promise::fail));
+
+      // VertxDataFetcher<List<Map<String, Object>>> queryDataFetcher =
+      //    new VertxDataFetcher<>(
+      //        (env, promise) ->
+      //            sqlConnectionPool
+      //                .rxBegin()
+      //                .flatMap(
+      //                    transaction ->
+      //                        getResponse(
+      //                                transactionSQLExecutorFunction.apply(transaction),
+      //                                env,
+      //                                transaction)
+      //                            .flatMap(
+      //                                result ->
+      //                                    transaction.rxCommit().andThen(Single.just(result))))
+      //                .subscribe(promise::complete, promise::fail));
       databaseSchema
           .getTableNames()
           .forEach(
