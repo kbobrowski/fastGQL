@@ -221,7 +221,7 @@ public class GraphQLDefinition {
     }
 
     private Function<Row, Single<Map<String, Object>>> createExecutorForColumn(
-        SQLQuery.Table table, Field field, GraphQLField graphQLField, SQLQuery sqlQuery) {
+        SQLQuery.Table table, GraphQLField graphQLField, SQLQuery sqlQuery) {
       String columnName = graphQLField.getQualifiedName().getKeyName();
       SQLQuery.SelectColumn selectColumn = sqlQuery.addSelectColumn(table, columnName);
       return row -> {
@@ -271,8 +271,8 @@ public class GraphQLDefinition {
           OpSpec opSpec = new OpSpec();
           OpSpecUtils.checkColumnIsEqValue(opSpec, foreignColumnName, value);
           return getRootResponse(foreignTableName, field.getSelectionSet(), transaction, opSpec)
-            .toList()
-            .map(result -> Map.of(field.getName(), result));
+              .toList()
+              .map(result -> Map.of(field.getName(), result));
         }
       };
     }
@@ -292,7 +292,7 @@ public class GraphQLDefinition {
                         graphQLDatabaseSchema.fieldAt(table.getTableName(), field.getName());
                     switch (graphQLField.getReferenceType()) {
                       case NONE:
-                        return createExecutorForColumn(table, field, graphQLField, sqlQuery);
+                        return createExecutorForColumn(table, graphQLField, sqlQuery);
                       case REFERENCING:
                         return createExecutorForReferencing(
                             table, field, graphQLField, sqlQuery, transaction);
@@ -348,7 +348,10 @@ public class GraphQLDefinition {
                                       env.getField().getSelectionSet(),
                                       transaction,
                                       new OpSpec())
-                                  .toList())
+                                  .toList()
+                                  .flatMap(
+                                      result ->
+                                          transaction.rxCommit().andThen(Single.just(result))))
                       .subscribe(promise::complete, promise::fail));
 
       // VertxDataFetcher<List<Map<String, Object>>> queryDataFetcher =
