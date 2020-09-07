@@ -58,17 +58,35 @@ public class SQLQuery {
               check -> {
                 String columnName = check.getColumn();
                 OpSpec.Condition condition = check.getCondition();
-                Object value = condition.getValue();
-                String valueAsString =
-                    value instanceof String ? String.format("'%s'", value) : String.valueOf(value);
-                return String.format(
-                    "%s.%s%s%s",
-                    tableAlias,
-                    columnName,
-                    relationalOperatorToString(condition.getRelationalOperator()),
-                    valueAsString);
+                return sqlCheckString(columnName, condition);
               })
           .collect(Collectors.joining(" AND "));
+    }
+
+    private String sqlCheckString(String columnName, OpSpec.Condition condition) {
+      StringBuilder sqlCheckStringBuilder = new StringBuilder();
+      Object value = condition.getValue();
+      String valueAsString =
+          value instanceof String ? String.format("'%s'", value) : String.valueOf(value);
+      sqlCheckStringBuilder.append(
+          String.format(
+              "%s.%s%s%s",
+              tableAlias,
+              columnName,
+              relationalOperatorToString(condition.getRelationalOperator()),
+              valueAsString));
+      condition
+          .getNext()
+          .forEach(
+              nextCondition ->
+                  sqlCheckStringBuilder
+                      .append(
+                          String.format(
+                              " %s (",
+                              nextCondition.getLogicalConnective().toString().toUpperCase()))
+                      .append(sqlCheckString(columnName, nextCondition))
+                      .append(")"));
+      return sqlCheckStringBuilder.toString();
     }
   }
 
@@ -122,18 +140,12 @@ public class SQLQuery {
   private final Table table;
   private final List<SelectColumn> selectColumns;
   private final List<LeftJoin> leftJoins;
-  private final OpSpec opSpec;
 
   public SQLQuery(String tableName, OpSpec opSpec) {
     this.table = createNewTable(tableName);
     this.selectColumns = new ArrayList<>();
     this.leftJoins = new ArrayList<>();
-    this.opSpec = opSpec;
     this.table.addChecks(opSpec.getChecks());
-  }
-
-  public OpSpec getOpSpec() {
-    return opSpec;
   }
 
   public Table createNewTable(String tableName) {

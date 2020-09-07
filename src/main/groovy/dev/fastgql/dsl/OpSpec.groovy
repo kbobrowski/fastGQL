@@ -40,11 +40,11 @@ class OpSpec {
             return this
         }
 
-        def and(Closure cl) {
+        def and(@DelegatesTo(strategy=Closure.DELEGATE_ONLY, value=ConditionSpec) Closure cl) {
             return logicalConnectiveMethod(LogicalConnective.and, cl)
         }
 
-        def or(Closure cl) {
+        def or(@DelegatesTo(strategy=Closure.DELEGATE_ONLY, value=ConditionSpec) Closure cl) {
             return logicalConnectiveMethod(LogicalConnective.or, cl)
         }
 

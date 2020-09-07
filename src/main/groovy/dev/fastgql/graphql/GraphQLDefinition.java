@@ -300,7 +300,8 @@ public class GraphQLDefinition {
                         return createExecutorForReferenced(
                             table, field, graphQLField, sqlQuery, transaction);
                       default:
-                        return row -> Single.just(Map.of());
+                        throw new RuntimeException(
+                            "Unknown reference type: " + graphQLField.getReferenceType());
                     }
                   });
       return executors.collect(Collectors.toList());
