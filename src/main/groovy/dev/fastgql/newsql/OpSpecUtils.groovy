@@ -1,4 +1,4 @@
-package dev.fastgql.graphql
+package dev.fastgql.newsql
 
 import dev.fastgql.dsl.OpSpec
 
